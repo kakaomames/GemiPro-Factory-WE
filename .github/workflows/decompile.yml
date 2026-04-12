@@ -1,0 +1,60 @@
+name: APK-Web-Factory-Engine
+
+on:
+  push:
+    paths:
+      - 'apks/**'
+  workflow_dispatch: # 手動起動ボタンも完備！
+
+jobs:
+  factory-mission:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚀 チェックアウト
+        uses: actions/checkout@v4
+
+      - name: ☕ Java & Python セットアップ
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - uses: actions/setup-python@v5
+        with:
+          python_version: '3.10'
+
+      - name: 📥 最新兵器の現地調達 (curl)
+        run: |
+          mkdir -p tools
+          # Android.jar (API 34) を調達
+          curl -L "https://github.com/S6-S6/Android-Jar/raw/master/android-34/android.jar" -o tools/Android.jar
+          # APKEditor.jar の最新版を調達 (URLは適宜最新の配布元へ)
+          # ここでは例として直リンクですが、APIでタグ取得するのもアリです
+          curl -L "https://github.com/RE_REPO/APKEditor/releases/latest/download/APKEditor.jar" -o tools/APKEditor.jar
+          echo "✅ 最新の JAR を tools/ に配備完了！"
+
+      - name: 🛠️ 依存ライブラリのインストール
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool
+          pip install lief UnityPy
+          echo "✅ ツール群の準備完了！"
+
+      - name: ⚙️ 変換ミッション実行
+        run: |
+          # 隊員こだわりの shell=True スクリプトを叩く
+          python scripts/decompile_engine.py
+
+      - name: 📤 結果をプッシュ
+        run: |
+          git config --local user.email "gemipro-bot@github.com"
+          git config --local user.name "GemiPro-Bot"
+          git add result.json
+          # 抽出したアセットもリポジトリに残すならここに追加
+          # git add www/assets/** if ! git diff --cached --exit-code; then
+            git commit -m "chore: factory update [skip ci]"
+            git push
+          else
+            echo "No changes to report."
+          fi
