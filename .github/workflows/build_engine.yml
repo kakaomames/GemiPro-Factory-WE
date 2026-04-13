@@ -27,15 +27,34 @@ jobs:
         with:
           node-version: '20'
 
-      - name: ツールインストール (dex2jar, APKEditor, CheerpJ)
+      - name: ツールインストール (dex2jar v2.4 手動導入 ＆ APKEditor)
         run: |
           sudo apt-get update
-          sudo apt-get install -y dex2jar
-          pip install requests
-          # APKEditorの取得
+          sudo apt-get install -y unzip default-jre-headless
+          
+          # 1. dex2jar v2.4 を直接ダウンロード
+          curl -L -o dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
+          unzip dex-tools.zip
+          
+          # フォルダ名を整えて実行権限を付与
+          # v2.4のZIPを解凍すると "dex-tools-v2.4" というフォルダができるはずです
+          chmod +x dex-tools-v2.4/*.sh
+          
+          # 以降のステップでパスを気にせず使えるように $GITHUB_PATH に追加
+          echo "$(pwd)/dex-tools-v2.4" >> $GITHUB_PATH
+          
+          # 2. APKEditorの取得
           curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
-          # CheerpJ CLIのインストール
+          
+          # 3. Python & Node 依存
+          pip install requests
           npm install -g @leaningtech/cheerpj
+          
+          echo "✅ dex2jar v2.4 の準備が整いました！"
+
+
+
+          
 
       - name: 1. APKの準備（APKsならマージ）
         run: |
