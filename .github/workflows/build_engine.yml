@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '**.apk'
+      - '**.apks'
   workflow_dispatch:
 
 jobs:
@@ -14,84 +15,68 @@ jobs:
       - name: 基地コードをチェックアウト
         uses: actions/checkout@v4
 
-      - name: Java & Python 環境セットアップ
+      - name: Java & Python & Node.js セットアップ
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Pythonセットアップ
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: APK Editor.jar の調達
+      - name: ツールインストール (dex2jar, APKEditor, CheerpJ)
         run: |
-          curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
-
-
-      - name: ツールインストール (dex2jar, requests & CheerpJ)
-        run: |
-          # システムツールのインストール
           sudo apt-get update
           sudo apt-get install -y dex2jar
-          
-          # Python依存のインストール
           pip install requests
-          
-          # Node.js環境のセットアップ (CheerpJ用)
-          # Actions標準のsetup-nodeを使っても良いですが、ここで一気にやります
-          sudo apt-get install -y nodejs npm
-          
-          # CheerpJ CLI (AOTコンパイラ) のインストール
-          # ※ CheerpJ 3.0以降は npm経由でツールが提供されています
+          # APKEditorの取得
+          curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
+          # CheerpJ CLIのインストール
           npm install -g @leaningtech/cheerpj
-          
-          echo "✅ 全ツールのインストールが完了しました！"
 
       - name: 1. APKの準備（APKsならマージ）
         run: |
-          # APKsファイルがあるか確認
           APKS_FILE=$(ls *.apks 2>/dev/null | head -n 1)
-          
           if [ ! -z "$APKS_FILE" ]; then
-            echo "📦 APKsを検知。結合を開始します..."
+            echo "📦 APKsを検知しました。マージを開始します: $APKS_FILE"
             java -jar APKEditor.jar m -i "$APKS_FILE" -o merged-app.apk
             TARGET_APK="merged-app.apk"
           else
             TARGET_APK=$(ls *.apk | head -n 1)
           fi
           
-          echo "Target for conversion: $TARGET_APK"
-          # 以降、この $TARGET_APK を使って dex2jar を実行
-          d2j-dex2jar "$TARGET_APK" -o app-logic.jar
+          if [ -z "$TARGET_APK" ]; then echo "❌ APKが見つかりません！"; exit 1; fi
+          echo "TARGET_APK=$TARGET_APK" >> $GITHUB_ENV
           
-
-      - name: 1. APKをJARへ変換
-        run: |
-          APK_FILE=$(ls *.apk | head -n 1)
-          if [ -z "$APK_FILE" ]; then echo "APK not found"; exit 1; fi
-          echo "Target APK: $APK_FILE"
-          d2j-dex2jar "$APK_FILE" -o app-logic.jar
+          # JARへ変換
+          d2j-dex2jar "$TARGET_APK" -o app-logic.jar
 
       - name: 2. 依存関係スキャン ＆ AOSP強奪
         run: |
-          # スキャン結果をファイルに出力
           python scripts/scanner.py app-logic.jar > dependencies.txt
-          # リストを元にDL実行
           python scripts/check_and_dl.py dependencies.txt
 
-      - name: 3. CheerpJコンパイル準備
+      - name: 3. Javaコンパイル ＆ CheerpJ変換
         run: |
-          echo "これより CheerpJ AOTコンパイラによるJS化を開始します。"
-          # ここにCheerpJのインストールと実行コマンドを記述
-          # 例: npx cheerpjfy vendor/java/*.java
+          echo "🛠️ Javaソースを .class にコンパイル..."
+          # vendor/java 内のソースをまとめてコンパイル
+          find vendor/java -name "*.java" > sources.txt
+          if [ -s sources.txt ]; then
+            javac -cp app-logic.jar @sources.txt -d bin/
+            echo "⚡ CheerpJ AOTコンパイルを実行..."
+            # ここで bin/ 内のクラスをJS化
+            # cheerpjfy bin/ ... (プロジェクトに合わせた引数)
+          fi
 
-      - name: 4. 成果物のパッケージング
+      - name: 成果物の保存
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: we-ipa-package
           path: |
             vendor/java/
-            web/
-            *.jar
+            app-logic.jar
+            merged-app.apk
