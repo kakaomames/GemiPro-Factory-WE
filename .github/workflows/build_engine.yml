@@ -23,71 +23,40 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
-      - name: ツールインストール (dex2jar v2.4 手動導入 ＆ APKEditor)
+      - name: ツールインストール (Cheerp PPA ＆ dex2jar ＆ APKEditor)
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip default-jre-headless
+          sudo apt-get install -y unzip software-properties-common default-jdk
           
-          # 1. dex2jar v2.4 を直接ダウンロード
-          curl -L -o dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
-          unzip dex-tools.zip
-          
-          # フォルダ名を整えて実行権限を付与
-          # v2.4のZIPを解凍すると "dex-tools-v2.4" というフォルダができるはずです
-          chmod +x dex-tools-v2.4/*.sh
-          
-          # 以降のステップでパスを気にせず使えるように $GITHUB_PATH に追加
-          echo "$(pwd)/dex-tools-v2.4" >> $GITHUB_PATH
-          
-          # 2. APKEditorの取得
-          curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
-          
-          # 3. Python & Node 依存
-          pip install requests
-          npm install -g @leaningtech/cheerpj
-          
-          echo "✅ dex2jar v2.4 の準備が整いました！"
-
-      - name: ツールインストール (PPA経由でCheerp導入 ＆ dex2jar)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip software-properties-common
-          
-          # 1. Cheerp PPAの追加
+          # 1. Cheerp PPAの追加とNoble向け強制書き換え
           sudo add-apt-repository -y ppa:leaningtech-dev/cheerp-nightly-ppa
-          
-          # 2. Noble(24.04)用がない場合、Jammy(22.04)用を代わりに見るように書き換え
-          # ※lsb_release -cs が noble を返すので、それを jammy に置換
-          sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/leaningtech-dev-ubuntu-cheerp-nightly-ppa-noble.sources || true
+          # Noble用が存在しない場合のためにJammy(22.04)をターゲットにする
+          # sources.list.d 内のファイル名は環境によって微妙に変わるため、ワイルドカードで指定
+          sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/*cheerp*.sources || true
           
           sudo apt-get update
           sudo apt-get install -y cheerp-core
           
-          # 3. dex2jar v2.4 導入 (前回成功した手順)
+          # 2. dex2jar v2.4 導入
           curl -L -o dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
           unzip dex-tools.zip
           chmod +x dex-tools-v2.4/*.sh
           echo "$(pwd)/dex-tools-v2.4" >> $GITHUB_PATH
           
-          # 4. APKEditor 取得
+          # 3. APKEditor 取得
           curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
           
+          # 4. Python依存
           pip install requests
-          echo "✅ Cheerp-core の導入を試みました！"
-
-
-
           
+          echo "✅ 全ツールの準備完了（npmエラー回避版）"
 
       - name: 1. APKの準備（APKsならマージ）
         run: |
           APKS_FILE=$(ls *.apks 2>/dev/null | head -n 1)
           if [ ! -z "$APKS_FILE" ]; then
-            echo "📦 APKsを検知しました。マージを開始します: $APKS_FILE"
+            echo "📦 APKsを検知。マージを開始します: $APKS_FILE"
             java -jar APKEditor.jar m -i "$APKS_FILE" -o merged-app.apk
             TARGET_APK="merged-app.apk"
           else
@@ -97,24 +66,23 @@ jobs:
           if [ -z "$TARGET_APK" ]; then echo "❌ APKが見つかりません！"; exit 1; fi
           echo "TARGET_APK=$TARGET_APK" >> $GITHUB_ENV
           
-          # JARへ変換
-          d2j-dex2jar "$TARGET_APK" -o app-logic.jar
+          # JARへ変換 (コマンド名は v2.4 の仕様に合わせて .sh を付与)
+          d2j-dex2jar.sh "$TARGET_APK" -o app-logic.jar
 
       - name: 2. 依存関係スキャン ＆ AOSP強奪
         run: |
           python scripts/scanner.py app-logic.jar > dependencies.txt
           python scripts/check_and_dl.py dependencies.txt
 
-      - name: 3. Javaコンパイル ＆ CheerpJ変換
+      - name: 3. Javaコンパイル ＆ Cheerp変換
         run: |
           echo "🛠️ Javaソースを .class にコンパイル..."
-          # vendor/java 内のソースをまとめてコンパイル
+          mkdir -p bin
           find vendor/java -name "*.java" > sources.txt
           if [ -s sources.txt ]; then
             javac -cp app-logic.jar @sources.txt -d bin/
-            echo "⚡ CheerpJ AOTコンパイルを実行..."
-            # ここで bin/ 内のクラスをJS化
-            # cheerpjfy bin/ ... (プロジェクトに合わせた引数)
+            echo "⚡ Cheerpコンパイル（cheerp-core）の準備..."
+            # ここに cheerp-core の実行コマンドを記述
           fi
 
       - name: 成果物の保存
@@ -126,3 +94,4 @@ jobs:
             vendor/java/
             app-logic.jar
             merged-app.apk
+            dependencies.txt
