@@ -24,11 +24,24 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: ツールインストール (dex2jar & requests)
+      - name: ツールインストール (dex2jar, requests & CheerpJ)
         run: |
+          # システムツールのインストール
           sudo apt-get update
           sudo apt-get install -y dex2jar
+          
+          # Python依存のインストール
           pip install requests
+          
+          # Node.js環境のセットアップ (CheerpJ用)
+          # Actions標準のsetup-nodeを使っても良いですが、ここで一気にやります
+          sudo apt-get install -y nodejs npm
+          
+          # CheerpJ CLI (AOTコンパイラ) のインストール
+          # ※ CheerpJ 3.0以降は npm経由でツールが提供されています
+          npm install -g @leaningtech/cheerpj
+          
+          echo "✅ 全ツールのインストールが完了しました！"
 
       - name: 1. APKをJARへ変換
         run: |
