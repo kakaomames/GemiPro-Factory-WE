@@ -52,6 +52,33 @@ jobs:
           
           echo "✅ dex2jar v2.4 の準備が整いました！"
 
+      - name: ツールインストール (PPA経由でCheerp導入 ＆ dex2jar)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip software-properties-common
+          
+          # 1. Cheerp PPAの追加
+          sudo add-apt-repository -y ppa:leaningtech-dev/cheerp-nightly-ppa
+          
+          # 2. Noble(24.04)用がない場合、Jammy(22.04)用を代わりに見るように書き換え
+          # ※lsb_release -cs が noble を返すので、それを jammy に置換
+          sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/leaningtech-dev-ubuntu-cheerp-nightly-ppa-noble.sources || true
+          
+          sudo apt-get update
+          sudo apt-get install -y cheerp-core
+          
+          # 3. dex2jar v2.4 導入 (前回成功した手順)
+          curl -L -o dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
+          unzip dex-tools.zip
+          chmod +x dex-tools-v2.4/*.sh
+          echo "$(pwd)/dex-tools-v2.4" >> $GITHUB_PATH
+          
+          # 4. APKEditor 取得
+          curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
+          
+          pip install requests
+          echo "✅ Cheerp-core の導入を試みました！"
+
 
 
           
