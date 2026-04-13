@@ -28,6 +28,7 @@ jobs:
         run: |
           curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
 
+
       - name: ツールインストール (dex2jar, requests & CheerpJ)
         run: |
           # システムツールのインストール
@@ -46,6 +47,24 @@ jobs:
           npm install -g @leaningtech/cheerpj
           
           echo "✅ 全ツールのインストールが完了しました！"
+
+      - name: 1. APKの準備（APKsならマージ）
+        run: |
+          # APKsファイルがあるか確認
+          APKS_FILE=$(ls *.apks 2>/dev/null | head -n 1)
+          
+          if [ ! -z "$APKS_FILE" ]; then
+            echo "📦 APKsを検知。結合を開始します..."
+            java -jar APKEditor.jar m -i "$APKS_FILE" -o merged-app.apk
+            TARGET_APK="merged-app.apk"
+          else
+            TARGET_APK=$(ls *.apk | head -n 1)
+          fi
+          
+          echo "Target for conversion: $TARGET_APK"
+          # 以降、この $TARGET_APK を使って dex2jar を実行
+          d2j-dex2jar "$TARGET_APK" -o app-logic.jar
+          
 
       - name: 1. APKをJARへ変換
         run: |
