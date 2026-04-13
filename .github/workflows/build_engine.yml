@@ -24,6 +24,10 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: APK Editor.jar の調達
+        run: |
+          curl -L -o APKEditor.jar https://github.com/REAndroid/APKEditor/releases/download/V1.4.1/APKEditor-1.4.1.jar
+
       - name: ツールインストール (dex2jar, requests & CheerpJ)
         run: |
           # システムツールのインストール
