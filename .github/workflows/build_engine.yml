@@ -1,0 +1,61 @@
+name: WE-AOSP-Auto-Build
+
+on:
+  push:
+    paths:
+      - '**.apk'
+  workflow_dispatch:
+
+jobs:
+  build-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 基地コードをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Java & Python 環境セットアップ
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Pythonセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: ツールインストール (dex2jar & requests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dex2jar
+          pip install requests
+
+      - name: 1. APKをJARへ変換
+        run: |
+          APK_FILE=$(ls *.apk | head -n 1)
+          if [ -z "$APK_FILE" ]; then echo "APK not found"; exit 1; fi
+          echo "Target APK: $APK_FILE"
+          d2j-dex2jar "$APK_FILE" -o app-logic.jar
+
+      - name: 2. 依存関係スキャン ＆ AOSP強奪
+        run: |
+          # スキャン結果をファイルに出力
+          python scripts/scanner.py app-logic.jar > dependencies.txt
+          # リストを元にDL実行
+          python scripts/check_and_dl.py dependencies.txt
+
+      - name: 3. CheerpJコンパイル準備
+        run: |
+          echo "これより CheerpJ AOTコンパイラによるJS化を開始します。"
+          # ここにCheerpJのインストールと実行コマンドを記述
+          # 例: npx cheerpjfy vendor/java/*.java
+
+      - name: 4. 成果物のパッケージング
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: we-ipa-package
+          path: |
+            vendor/java/
+            web/
+            *.jar
